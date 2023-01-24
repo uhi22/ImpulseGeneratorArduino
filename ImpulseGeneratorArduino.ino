@@ -1,7 +1,7 @@
 /* Impulse-Generator
  *  
  * Features:
- *   - create pulses on a pin
+ *   - create voltage ramps and pulses
  *   
  * Hardware:
  *   - Arduino Nano (Board in Arduino IDE: "Arduino Nano, ATmega328P")
@@ -9,6 +9,7 @@
  * 
  * Change Log:
  *  2022-09-28 Uwe: Added analog output via SPI-DAC
+ *  2023-01-24 Uwe: positive pulses
  * 
  * Todos:
  * 
@@ -31,6 +32,9 @@ uint16_t tPulseHigh_ms = 5;
 uint16_t tPulseLow_ms = 5;
 uint8_t nPulseSection=0;
 uint16_t nPulseSubTime=0;
+uint16_t nHighTime_ms = 1;
+uint16_t nCounterOfIdenticalPulses = 0;
+
 
 void setup() {
   pinMode(PULSE_PIN,OUTPUT);
@@ -61,7 +65,7 @@ void writeMCP4922_AB(byte AB, uint16_t v) {
 
 
 
-void pulseGenerator(void) {
+void pulseGenerator1(void) {
   uint16_t vOut;
   switch (nPulseSection) {
     case 0:
@@ -100,6 +104,39 @@ void pulseGenerator(void) {
   writeMCP4922_AB( 0, vOut );
 }
 
+/* create positive pulses. Width starts with 1ms and increases up to 500ms.
+   Off-phase is fix 500ms. */
+#define MAXIMUM_HIGH_TIME_MS 500
+#define LOW_TIME_MS 500
+void pulseGenerator2_positivePulses(void) {
+  uint16_t vOut;
+  switch (nPulseSection) {
+    case 0:
+       vOut = 4095; /* full ON */
+       nPulseSubTime++;
+       if (nPulseSubTime>=nHighTime_ms) {
+          nPulseSubTime=0;
+          nPulseSection=1;
+       }
+       break;
+    case 1:
+       vOut = 0; /* 0V */
+       nPulseSubTime++;
+       if (nPulseSubTime>=LOW_TIME_MS) {
+          nPulseSubTime=0;
+          nPulseSection=0;
+          nCounterOfIdenticalPulses++;
+          if (nCounterOfIdenticalPulses>=5) {
+              nHighTime_ms++;
+              nCounterOfIdenticalPulses = 0;
+              if (nHighTime_ms>=MAXIMUM_HIGH_TIME_MS) { nHighTime_ms=1; }
+          }
+       }
+       break;
+  }
+  writeMCP4922_AB( 0, vOut );
+}
+
 void demoDac(void) {
   int i;
   for (i=0; i<4096; i+=4) {
@@ -112,7 +149,8 @@ void loop() {
   //delay(tPulseHigh_ms);
   //digitalWrite(PULSE_PIN,LOW);
   //delay(tPulseLow_ms);
-  pulseGenerator();
+  //pulseGenerator1();
+  pulseGenerator2_positivePulses();
   delay(1); /* wait 1ms */
 
 }
